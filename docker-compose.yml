@@ -1,0 +1,67 @@
+services:
+  app:
+    build: ./
+    ports:
+      - '3000:3000'
+    environment:
+      - PORT=3000
+      - DATABASE_HOST=db
+      - DATABASE_PORT=5432
+      - DATABASE_USERNAME=postgres
+      - DATABASE_PASSWORD=password
+      - DATABASE_NAME=stock_price_checker
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
+    volumes:
+      - ./src:/app/src
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - stock-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - stock-network
+    restart: unless-stopped
+
+  db:
+    image: timescale/timescaledb-ha:pg15-latest
+    environment:
+      - POSTGRES_DB=stock_price_checker
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/database/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d stock_price_checker']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - stock-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  stock-network:
+    driver: bridge
